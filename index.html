@@ -124,6 +124,11 @@ p { line-height: 1.5; margin: 0; max-width: 62ch; }
 input[type="range"] { accent-color: var(--neon); width: 140px; }
 input[type="checkbox"] { accent-color: var(--neon); width: 24px; height: 24px; }
 select { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.tag-exp { display: inline-block; font-size: 11px; letter-spacing: .1em; padding: 2px 6px; border-radius: 6px; background: var(--bust); color: #fff; vertical-align: middle; }
+.detstatus { font-size: 14px; color: var(--muted); }
+.detstatus.live { color: var(--neon); }
+.confirm { border: 1px solid var(--neon); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+.confirm-text { font-family: var(--font-display); font-weight: 800; font-size: 24px; text-transform: uppercase; }
 .note { border-left: 3px solid var(--neon-dim); padding: 8px 12px; color: var(--muted); font-size: 14px; }
 .note strong { color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .banner { transition: none; } }
@@ -154,7 +159,7 @@ select { background: var(--bg); border: 1px solid var(--line); border-radius: 10
       <button class="btn" id="btn-resume" type="button" hidden>Weiterspielen</button>
       <button class="btn" id="btn-calib" type="button">Tor einmessen</button>
     </div>
-    <p class="note"><strong>Prototyp-Stand:</strong> Punkte werden per Fingertipp aufs Tor oder per Schnelltaste eingegeben. Die automatische Ballerkennung ist noch nicht eingebaut und wird erst in der nativen iPhone-App entwickelt.</p>
+    <p class="note"><strong>Prototyp-Stand:</strong> Punkte werden per Fingertipp aufs Tor oder per Schnelltaste eingegeben. Eine erste Ballerkennung gibt es als Testfunktion (Kamerabild im Spiel). Sie ist ungeprüft und fragt jeden Treffer nach.</p>
   </section>
 
   <!-- SETUP -->
@@ -213,6 +218,24 @@ select { background: var(--bg); border: 1px solid var(--line); border-radius: 10
           </div>
         </div>
         <div class="goalbox" id="gamebox"><canvas id="gamecanvas"></canvas></div>
+        <div class="card stack detect" id="detectpanel" hidden>
+          <div class="row" style="justify-content: space-between">
+            <h3>Ballerkennung <span class="tag-exp">Test</span></h3>
+            <button class="btn small" id="btn-detect" type="button">Starten</button>
+          </div>
+          <p class="detstatus" id="detstatus">Aus. Die Erkennung arbeitet nur mit der Live-Kamera und eingemessenem Tor.</p>
+          <div class="confirm" id="detconfirm" hidden>
+            <div class="confirm-text" id="detconfirmtext"></div>
+            <div class="row">
+              <button class="btn small primary" id="btn-det-ok" type="button">Stimmt</button>
+              <button class="btn small" id="btn-det-no" type="button">Falsch</button>
+            </div>
+            <p class="muted" style="font-size: 13px">Falsch erkannt? Tippe einfach die richtige Stelle im Bild oder eine Schnelltaste. Das zählt als Korrektur.</p>
+          </div>
+          <div class="setting"><label for="s-sens">Empfindlichkeit<small>höher = erkennt kleinere Bewegungen, aber auch mehr Fehlalarme</small></label><input type="range" id="s-sens" min="0" max="1" step="0.05"></div>
+          <div class="setting"><label for="s-auto">Ohne Nachfrage übernehmen<small>nur einschalten, wenn die Erkennung zuverlässig wirkt</small></label><input type="checkbox" id="s-auto"></div>
+          <div class="row" style="justify-content: space-between"><span class="muted" id="detstats" style="font-size: 14px"></span><button class="iconbtn" id="btn-det-reset" type="button">Statistik leeren</button></div>
+        </div>
         <p class="muted" style="font-size: 14px">Tippe auf die Stelle, an der der Ball im Tor gelandet ist. Tipp neben das Tor zählt als Fehlschuss.</p>
         <div class="quick" id="quick"></div>
         <div class="card stack">
@@ -451,7 +474,40 @@ const BD = (() => {
     return res.sort((a, b) => a.length - b.length);
   }
 
-  return { PRESETS, zoneAt, zoneGrid, drawList, squareToQuad, invert3, apply, START_OPTIONS, THROWS_PER_TURN, newGame, shoot, undo, finishOptions };
+  // ---------- Experimental ball detection helpers (pure, testable) ----------
+  /** Largest 4-connected blob in a 0/1 mask. Returns {area,cx,cy,x0,y0,x1,y1} or null. */
+  function largestBlob(mask, w, h) {
+    const seen = new Uint8Array(w * h); const stack = new Int32Array(w * h);
+    let best = null;
+    for (let i = 0; i < w * h; i++) {
+      if (!mask[i] || seen[i]) continue;
+      let sp = 0, area = 0, sx = 0, sy = 0, x0 = w, y0 = h, x1 = 0, y1 = 0;
+      stack[sp++] = i; seen[i] = 1;
+      while (sp) {
+        const k = stack[--sp], x = k % w, y = (k - x) / w;
+        area++; sx += x; sy += y;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        if (x > 0 && mask[k - 1] && !seen[k - 1]) { seen[k - 1] = 1; stack[sp++] = k - 1; }
+        if (x < w - 1 && mask[k + 1] && !seen[k + 1]) { seen[k + 1] = 1; stack[sp++] = k + 1; }
+        if (y > 0 && mask[k - w] && !seen[k - w]) { seen[k - w] = 1; stack[sp++] = k - w; }
+        if (y < h - 1 && mask[k + w] && !seen[k + w]) { seen[k + w] = 1; stack[sp++] = k + w; }
+      }
+      if (!best || area > best.area) best = { area, cx: sx / area + 0.5, cy: sy / area + 0.5, x0, y0, x1, y1 };
+    }
+    return best;
+  }
+
+  /**
+   * Pick the impact frame from a tracked shot. Heuristic for a camera BEHIND the goal:
+   * the ball grows while it flies towards the camera and is largest when it reaches the net.
+   * Returns the track entry with the largest area, or null if the track is too short.
+   */
+  function pickImpact(track, minFrames = 2) {
+    if (!track || track.length < minFrames) return null;
+    return track.reduce((a, b) => (b.area > a.area ? b : a));
+  }
+
+  return { PRESETS, zoneAt, zoneGrid, drawList, largestBlob, pickImpact, squareToQuad, invert3, apply, START_OPTIONS, THROWS_PER_TURN, newGame, shoot, undo, finishOptions };
 })();
 if (typeof module !== 'undefined') module.exports = BD;
 
@@ -469,7 +525,7 @@ const STARTDESC = { 100: 'Schnelles Duell', 200: 'Normales Spiel', 300: 'Länger
 const KEY = 'bolzduell.v1';
 const store = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } })();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ } }
-const S = Object.assign({ sound: true, voice: true, vol: 0.8, rate: 1.05, preset: 'standard', alpha: 0.45 }, store.settings || {});
+const S = Object.assign({ sound: true, voice: true, vol: 0.8, rate: 1.05, preset: 'standard', alpha: 0.45, sens: 0.5, autoAccept: false }, store.settings || {});
 let players = store.players || ['Spieler 1', 'Spieler 2'];
 let startScore = store.startScore || 200;
 let corners = store.corners || defaultCorners();
@@ -636,12 +692,13 @@ function draw(which) {
     const marks = game.history.filter(e => e.at && e.round === game.round && (e.player === game.current || game.winner !== null && e.player === game.winner)).slice(-3);
     marks.forEach((e, i) => { const p = BD.apply(H, e.at.u, e.at.v); ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#050806'; ctx.stroke(); ctx.fillStyle = '#050806'; ctx.font = "800 11px 'Saira Condensed', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(i + 1, p.x, p.y + 0.5); });
   }
+  if (which === 'game' && view === 'camera') drawDetect(ctx, c);
   if (which === 'calib') {
     q.forEach((p, i) => { ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(77,255,106,.25)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#4dff6a'; ctx.stroke(); ctx.fillStyle = '#4dff6a'; ctx.font = "800 12px 'Saira Condensed', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(['OL', 'OR', 'UR', 'UL'][i], p.x, p.y - 26); });
   }
 }
 let rafOn = false;
-function loop() { if (!media.live) { rafOn = false; return; } if (current === 'calib') draw('calib'); if (current === 'game' && view === 'camera') draw('game'); requestAnimationFrame(loop); }
+function loop() { if (!media.live) { rafOn = false; return; } if (current === 'calib') draw('calib'); if (current === 'game' && view === 'camera') { if (det.on) processFrame(); draw('game'); } requestAnimationFrame(loop); }
 function startLoop() { if (!rafOn) { rafOn = true; requestAnimationFrame(loop); } }
 window.addEventListener('resize', () => { if (current === 'calib') sizeCanvas('calib'); if (current === 'game') sizeCanvas('game'); });
 
@@ -700,6 +757,8 @@ function renderGame() {
   }).join('') || '<p class="muted">Noch keine Schüsse.</p>';
   $('view-virtual').setAttribute('aria-pressed', view === 'virtual');
   $('view-camera').setAttribute('aria-pressed', view === 'camera');
+  $('detectpanel').hidden = view !== 'camera';
+  renderDetStats();
   sizeCanvas('game');
 }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
@@ -737,11 +796,12 @@ function tapGoal(ev) {
   const Hi = BD.invert3(BD.squareToQuad(quadFor('game'))); if (!Hi) return;
   const uv = BD.apply(Hi, p.x, p.y);
   const z = BD.zoneAt(uv.x, uv.y, S.preset);
+  detCorrection(z.pts);
   registerShot(z.pts, z.label, z.pts ? { u: uv.x, v: uv.y } : null);
 }
 cv.game.addEventListener('pointerup', tapGoal);
 $('quick').innerHTML = [0, 5, 10, 15, 20, 25, 50].map(v => `<button type="button" data-v="${v}" class="${v ? '' : 'zero'}">${v}</button>`).join('');
-$('quick').addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; const v = +b.dataset.v; registerShot(v, v ? 'manuell' : 'Daneben', null); });
+$('quick').addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; const v = +b.dataset.v; detCorrection(v); registerShot(v, v ? 'manuell' : 'Daneben', null); });
 $('btn-undo').addEventListener('click', () => { if (game && game.history.length) { clearTimeout(changeT); game = BD.undo(game); persist(); banner('Letzter Schuss gelöscht'); renderGame(); } });
 $('btn-countdown').addEventListener('click', () => {
   audio(); [0, 1, 2].forEach(i => setTimeout(() => { sfx('beep', 880, 0.15); banner(String(3 - i)); }, i * 1000));
@@ -750,6 +810,152 @@ $('btn-countdown').addEventListener('click', () => {
 });
 $('view-virtual').addEventListener('click', () => { view = 'virtual'; renderGame(); });
 $('view-camera').addEventListener('click', () => { view = 'camera'; renderGame(); startLoop(); });
+
+// ---------- EXPERIMENTAL ball detection (motion-based, browser) ----------
+// Idea: learn the empty goal as background, look for a compact moving blob inside the
+// calibrated goal area, follow it while it moves and take the frame where it is largest
+// (camera behind the goal: the ball is biggest when it reaches the net). Heuristic, untested
+// on a real pitch – every detection is logged so we can measure how often it is right.
+const det = {
+  on: false, cv: null, ctx: null, pw: 0, ph: 0, roi: null, roiN: 0, Hi: null,
+  bg: null, learnUntil: 0, state: 'idle', track: [], quiet: 0, cooldownUntil: 0,
+  pending: null, lastBlob: null, lastShot: null, lastT: 0, statusText: '',
+  log: Array.isArray(store.detlog) ? store.detlog : [],
+};
+function detStatus(text, live = false) {
+  if (det.statusText === text) return; det.statusText = text;
+  const el = $('detstatus'); el.textContent = text; el.className = 'detstatus' + (live ? ' live' : '');
+}
+function detSetup() {
+  const v = media.video; if (!media.live || !v || !v.videoWidth) return false;
+  det.pw = 224; det.ph = Math.round(224 * v.videoHeight / v.videoWidth);
+  det.cv = document.createElement('canvas'); det.cv.width = det.pw; det.cv.height = det.ph;
+  det.ctx = det.cv.getContext('2d', { willReadFrequently: true });
+  const H = BD.squareToQuad(corners.map(p => ({ x: p.x * det.pw, y: p.y * det.ph })));
+  det.Hi = BD.invert3(H); if (!det.Hi) return false;
+  det.roi = new Uint8Array(det.pw * det.ph); det.roiN = 0;
+  for (let y = 0; y < det.ph; y++) for (let x = 0; x < det.pw; x++) {
+    const q = BD.apply(det.Hi, x + 0.5, y + 0.5);
+    if (q.x > -0.15 && q.x < 1.15 && q.y > -0.15 && q.y < 1.08) { det.roi[y * det.pw + x] = 1; det.roiN++; }
+  }
+  det.bg = null; det.state = 'idle'; det.track = []; det.pending = null; det.lastShot = null;
+  return det.roiN > 50;
+}
+function detRelearn() { det.bg = null; det.track = []; det.state = 'idle'; }
+
+function processFrame() {
+  const now = performance.now();
+  if (now - det.lastT < 25) return; det.lastT = now;      // max ~40 analyses per second
+  const { pw, ph, roi } = det, n = pw * ph;
+  det.ctx.drawImage(media.video, 0, 0, pw, ph);
+  const px = det.ctx.getImageData(0, 0, pw, ph).data;
+  const g = new Float32Array(n);
+  for (let i = 0, j = 0; i < n; i++, j += 4) g[i] = px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114;
+
+  if (!det.bg) { det.bg = g; det.learnUntil = now + 1000; detStatus('Lerne das leere Tor … bitte nicht ins Bild laufen.'); return; }
+  if (now < det.learnUntil) { for (let i = 0; i < n; i++) det.bg[i] = det.bg[i] * 0.7 + g[i] * 0.3; return; }
+
+  const thr = 14 + (1 - S.sens) * 36;
+  const mask = new Uint8Array(n); let changed = 0;
+  for (let i = 0; i < n; i++) if (roi[i] && Math.abs(g[i] - det.bg[i]) > thr) { mask[i] = 1; changed++; }
+
+  if (changed > det.roiN * 0.25) { // light change, camera bumped or a person in the goal
+    det.lastBlob = null; detRelearn(); detStatus('Bild zu unruhig (Licht, Person im Tor, Wackeln). Lerne neu …'); return;
+  }
+  const blob = changed ? BD.largestBlob(mask, pw, ph) : null;
+  const minA = 3 + (1 - S.sens) * 22, maxA = det.roiN * 0.05;
+  const ball = blob && blob.area >= minA && blob.area <= maxA ? blob : null;
+  det.lastBlob = ball;
+
+  // slowly adapt background where nothing moves (clouds, dusk)
+  if (det.state === 'idle') for (let i = 0; i < n; i++) if (!mask[i]) det.bg[i] = det.bg[i] * 0.95 + g[i] * 0.05;
+
+  if (det.pending) { detStatus('Treffer erkannt – bitte bestätigen oder korrigieren.', true); return; }
+  if (now < det.cooldownUntil) { detStatus('Kurze Pause nach dem Schuss …'); return; }
+
+  if (det.state === 'idle') {
+    detStatus('Bereit. Warte auf Schuss …', true);
+    if (ball) { det.state = 'track'; det.track = [{ ...ball, t: now }]; det.quiet = 0; }
+    return;
+  }
+  // tracking
+  if (ball) { det.track.push({ ...ball, t: now }); det.quiet = 0; } else det.quiet++;
+  detStatus('Ball verfolgt …', true);
+  if (det.quiet >= 5 || now - det.track[0].t > 1500) detFinish(now);
+}
+
+function detFinish(now) {
+  const track = det.track; det.state = 'idle'; det.track = [];
+  const hit = BD.pickImpact(track, 2);
+  if (!hit) return; // single-frame flicker: ignore
+  const uv = BD.apply(det.Hi, hit.cx, hit.cy);
+  const z = BD.zoneAt(uv.x, uv.y, S.preset);
+  const shot = { u: uv.x, v: uv.y, pts: z.pts, label: z.pts ? z.label : 'Daneben', area: hit.area, frames: track.length,
+                 track: track.map(p => ({ x: p.cx / det.pw, y: p.cy / det.ph })), hit: { x: hit.cx / det.pw, y: hit.cy / det.ph } };
+  det.lastShot = shot;
+  det.cooldownUntil = now + 2500;
+  if (S.autoAccept) {
+    detLog(shot, 'auto');
+    registerShot(shot.pts, shot.label + ' (erkannt)', shot.pts ? { u: shot.u, v: shot.v } : null);
+    setTimeout(detRelearn, 2400);
+  } else {
+    det.pending = shot;
+    sfx('beep', 1000, 0.12);
+    $('detconfirmtext').textContent = shot.pts ? `Erkannt: ${shot.pts} Punkte · ${shot.label}` : 'Erkannt: Daneben';
+    $('detconfirm').hidden = false;
+    say(shot.pts ? `Erkannt: ${shot.pts} Punkte?` : 'Erkannt: daneben?', 0);
+  }
+}
+function detResolve(result) {
+  const shot = det.pending; if (!shot) return;
+  det.pending = null; $('detconfirm').hidden = true;
+  detLog(shot, result);
+  setTimeout(detRelearn, 1500);
+}
+/** Called by manual input: if a detection is waiting, the manual value counts as correction. */
+function detCorrection(pts) {
+  if (!det.pending) return;
+  detResolve(pts === det.pending.pts ? 'ok' : 'korrigiert:' + pts);
+}
+function detLog(shot, result) {
+  det.log.push({ t: Date.now(), pts: shot.pts, u: +shot.u.toFixed(3), v: +shot.v.toFixed(3), area: shot.area, frames: shot.frames, sens: S.sens, result });
+  if (det.log.length > 300) det.log.shift();
+  store.detlog = det.log; persist(); renderDetStats();
+}
+function renderDetStats() {
+  const L = det.log, ok = L.filter(e => e.result === 'ok').length, wrong = L.filter(e => e.result === 'falsch').length,
+        corr = L.filter(e => String(e.result).startsWith('korrigiert')).length, auto = L.filter(e => e.result === 'auto').length;
+  $('detstats').textContent = L.length ? `Erkennungen: ${L.length} · richtig ${ok} · falsch ${wrong} · korrigiert ${corr}${auto ? ' · ohne Nachfrage ' + auto : ''}` : 'Noch keine Erkennungen.';
+}
+function drawDetect(ctx, c) {
+  if (!det.on) return;
+  const sx = c._w, sy = c._h;
+  ctx.save();
+  if (det.lastBlob && det.pw) {
+    const b = det.lastBlob, kx = sx / det.pw, ky = sy / det.ph;
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(b.x0 * kx - 2, b.y0 * ky - 2, (b.x1 - b.x0 + 1) * kx + 4, (b.y1 - b.y0 + 1) * ky + 4);
+    ctx.setLineDash([]);
+  }
+  const live = det.track.length ? det.track.map(p => ({ x: p.cx / det.pw, y: p.cy / det.ph })) : null;
+  const pts = live || (det.lastShot && det.lastShot.track);
+  if (pts) { ctx.fillStyle = '#4dff6a'; pts.forEach(p => { ctx.beginPath(); ctx.arc(p.x * sx, p.y * sy, 3, 0, Math.PI * 2); ctx.fill(); }); }
+  if (!live && det.lastShot) {
+    const h = det.lastShot.hit; ctx.beginPath(); ctx.arc(h.x * sx, h.y * sy, 11, 0, Math.PI * 2);
+    ctx.lineWidth = 3; ctx.strokeStyle = '#ff4d6a'; ctx.stroke();
+  }
+  ctx.restore();
+}
+$('btn-detect').addEventListener('click', () => {
+  if (det.on) { det.on = false; det.pending = null; $('detconfirm').hidden = true; $('btn-detect').textContent = 'Starten'; detStatus('Aus.'); return; }
+  if (!detSetup()) { detStatus('Keine Live-Kamera. Erst unter „Tor einmessen“ die Live-Kamera starten und die vier Ecken setzen.'); return; }
+  audio(); det.on = true; $('btn-detect').textContent = 'Stoppen'; startLoop();
+});
+$('btn-det-ok').addEventListener('click', () => { const s = det.pending; if (!s) return; detResolve('ok'); registerShot(s.pts, s.label + ' (erkannt)', s.pts ? { u: s.u, v: s.v } : null); });
+$('btn-det-no').addEventListener('click', () => detResolve('falsch'));
+$('btn-det-reset').addEventListener('click', () => { det.log = []; store.detlog = []; persist(); renderDetStats(); });
+$('s-sens').value = S.sens; $('s-sens').oninput = e => { S.sens = +e.target.value; persist(); };
+$('s-auto').checked = S.autoAccept; $('s-auto').onchange = e => { S.autoAccept = e.target.checked; persist(); };
 
 // ---------- winner ----------
 function renderWin() {
