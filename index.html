@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050806">
+<title>BOLZDUELL VISION</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-screen stadium app; scoreboard over a goal canvas, landscape splits into two columns. */
+:root {
+  --bg: #050806;
+  --panel: #0d1410;
+  --line: #1f2d24;
+  --fg: #e9f5ec;
+  --muted: #8aa394;
+  --neon: #4dff6a;
+  --neon-dim: #1d7031;
+  --ink-on-neon: #031006;
+  --bust: #ff4d6a;
+  --font-display: 'Saira Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; -webkit-tap-highlight-color: transparent; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--neon); outline-offset: 2px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 32px; }
+
+header.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 6px 14px; }
+.logo { font-family: var(--font-display); font-weight: 800; font-size: 26px; letter-spacing: .02em; line-height: 1; text-transform: uppercase; }
+.logo b { color: var(--neon); font-weight: 800; }
+.logo small { display: block; font-size: 11px; letter-spacing: .22em; white-space: nowrap; color: var(--muted); font-weight: 600; margin-top: 3px; }
+.iconbtn { background: none; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 14px; color: var(--muted); }
+.iconbtn:hover { color: var(--fg); border-color: var(--neon-dim); }
+
+h1, h2, h3 { font-family: var(--font-display); text-transform: uppercase; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+h2 { font-size: 24px; font-weight: 800; }
+h3 { font-size: 15px; font-weight: 600; letter-spacing: .14em; color: var(--muted); }
+p { line-height: 1.5; margin: 0; max-width: 62ch; }
+.muted { color: var(--muted); }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.btn { border: 0; border-radius: 12px; padding: 14px 20px; font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: .04em; text-transform: uppercase; background: var(--panel); border: 1px solid var(--line); }
+.btn.primary { background: var(--neon); color: var(--ink-on-neon); border-color: var(--neon); box-shadow: 0 0 24px -6px var(--neon); }
+.btn.small { font-size: 15px; padding: 9px 14px; }
+.btn:disabled { opacity: .4; cursor: default; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 16px; font-family: var(--font-display); font-weight: 600; font-size: 18px; }
+.chip[aria-pressed="true"] { background: var(--neon); color: var(--ink-on-neon); border-color: var(--neon); }
+
+/* Start */
+.hero { display: grid; gap: 22px; padding-block: 8px 4px; }
+.hero h1 { font-size: clamp(48px, 15vw, 104px); font-weight: 800; line-height: .86; }
+.hero h1 span { color: var(--neon); display: block; text-shadow: 0 0 28px rgba(77,255,106,.45); }
+.hero .tag { font-size: 18px; color: var(--muted); }
+.zonekey { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.zonekey div { border-radius: 8px; padding: 8px 4px; text-align: center; font-family: var(--font-display); font-weight: 800; font-size: 22px; }
+.zonekey small { display: block; font-family: var(--font-body); font-weight: 500; font-size: 11px; opacity: .8; }
+
+/* Setup */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.players { display: flex; flex-direction: column; gap: 8px; }
+.prow { display: flex; gap: 8px; align-items: center; }
+.prow .num { font-family: var(--font-display); font-weight: 800; color: var(--neon); width: 24px; text-align: center; }
+.prow input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; }
+.prow button { background: none; border: 1px solid var(--line); border-radius: 10px; width: 44px; height: 44px; color: var(--muted); }
+
+/* Game */
+.game { display: grid; gap: 14px; }
+@media (min-width: 760px) { .game { grid-template-columns: minmax(260px, 340px) 1fr; align-items: start; } }
+.status { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.status .round { font-family: var(--font-display); font-weight: 600; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; font-size: 14px; }
+.board { display: flex; flex-direction: column; gap: 8px; }
+.pl { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
+.pl.active { border-color: var(--neon); box-shadow: inset 4px 0 0 var(--neon); }
+.pl .name { font-weight: 600; font-size: 17px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .score { font-family: var(--font-display); font-weight: 800; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; grid-row: span 2; }
+.pl.active .score { color: var(--neon); }
+.pl .meta { font-size: 13px; color: var(--muted); }
+.throws { display: flex; gap: 6px; }
+.throws span { min-width: 36px; height: 26px; border-radius: 6px; border: 1px dashed var(--line); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: 16px; color: var(--muted); padding-inline: 4px; }
+.throws span.done { border-style: solid; border-color: var(--neon-dim); color: var(--fg); }
+.checkout { font-size: 14px; color: var(--neon); min-height: 1.4em; }
+
+.goalbox { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #000; touch-action: none; }
+.goalbox canvas { display: block; width: 100%; height: auto; }
+.viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.viewtoggle button { background: none; border: 0; padding: 7px 12px; font-size: 14px; color: var(--muted); }
+.viewtoggle button[aria-pressed="true"] { background: var(--neon); color: var(--ink-on-neon); font-weight: 600; }
+.quick { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.quick button { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 12px 0; font-family: var(--font-display); font-weight: 800; font-size: 22px; }
+.quick button.zero { color: var(--bust); }
+.history { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.history div { display: grid; grid-template-columns: 34px 1fr auto auto; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.history .r { color: var(--muted); }
+.history .bust { color: var(--bust); }
+.history .win { color: var(--neon); font-weight: 600; }
+
+.banner { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 18px); transform: translate(-50%, -20px); opacity: 0; pointer-events: none; background: var(--neon); color: var(--ink-on-neon); font-family: var(--font-display); font-weight: 800; font-size: 26px; text-transform: uppercase; padding: 10px 22px; border-radius: 12px; transition: opacity .2s, transform .2s; z-index: 20; max-width: calc(100vw - 32px); text-align: center; }
+.banner.show { opacity: 1; transform: translate(-50%, 0); }
+.banner.bust { background: var(--bust); color: #fff; }
+
+/* Winner */
+.winner { text-align: center; display: grid; gap: 16px; justify-items: center; padding-block: 28px; }
+.winner .gs { font-family: var(--font-display); font-weight: 800; font-size: clamp(56px, 18vw, 120px); line-height: .85; color: var(--neon); text-shadow: 0 0 40px rgba(77,255,106,.5); text-transform: uppercase; }
+.winner .who { font-family: var(--font-display); font-weight: 800; font-size: 36px; text-transform: uppercase; }
+.stats { width: 100%; max-width: 520px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.stats th, .stats td { padding: 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.stats th:first-child, .stats td:first-child { text-align: left; }
+.stats th { color: var(--muted); font-weight: 500; font-size: 13px; }
+
+/* Settings */
+.setting { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 10px; border-bottom: 1px solid var(--line); }
+.setting:last-child { border-bottom: 0; }
+.setting label { min-width: 0; }
+.setting small { display: block; color: var(--muted); font-size: 13px; }
+input[type="range"] { accent-color: var(--neon); width: 140px; }
+input[type="checkbox"] { accent-color: var(--neon); width: 24px; height: 24px; }
+select { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.note { border-left: 3px solid var(--neon-dim); padding: 8px 12px; color: var(--muted); font-size: 14px; }
+.note strong { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .banner { transition: none; } }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="bar">
+    <div class="logo">Bolz<b>duell</b><small>Vision · Prototyp</small></div>
+    <div class="row">
+      <button class="iconbtn" id="btn-home" type="button">Start</button>
+      <button class="iconbtn" id="btn-settings" type="button">Einstellungen</button>
+    </div>
+  </header>
+
+  <!-- START -->
+  <section id="screen-start" class="stack">
+    <div class="hero">
+      <h1>Bolzduell <span>Countdown</span></h1>
+      <p class="tag">Runter auf exakt null. Drei Schüsse pro Runde. Wer überwirft, verliert die Runde.</p>
+    </div>
+    <div class="zonekey" id="zonekey"></div>
+    <div class="row">
+      <button class="btn primary" id="btn-new" type="button">Neues Spiel</button>
+      <button class="btn" id="btn-resume" type="button" hidden>Weiterspielen</button>
+      <button class="btn" id="btn-calib" type="button">Tor einmessen</button>
+    </div>
+    <p class="note"><strong>Prototyp-Stand:</strong> Punkte werden per Fingertipp aufs Tor oder per Schnelltaste eingegeben. Die automatische Ballerkennung ist noch nicht eingebaut und wird erst in der nativen iPhone-App entwickelt.</p>
+  </section>
+
+  <!-- SETUP -->
+  <section id="screen-setup" class="stack" hidden>
+    <h2>Spiel einrichten</h2>
+    <div class="card stack">
+      <h3>Spieler</h3>
+      <div class="players" id="players"></div>
+      <div class="row"><button class="btn small" id="btn-addp" type="button">+ Spieler</button></div>
+    </div>
+    <div class="card stack">
+      <h3>Startpunkte</h3>
+      <div class="row" id="startopts"></div>
+      <p class="muted" id="startdesc"></p>
+    </div>
+    <div class="card stack">
+      <h3>Trefferzonen</h3>
+      <div class="row" id="presetopts"></div>
+    </div>
+    <div class="row"><button class="btn primary" id="btn-kickoff" type="button">Anpfiff</button></div>
+  </section>
+
+  <!-- CALIBRATION -->
+  <section id="screen-calib" class="stack" hidden>
+    <h2>Tor einmessen</h2>
+    <p class="muted">Ziehe die vier grünen Punkte genau auf die Innenecken des Tors: oben links, oben rechts, unten rechts, unten links, jeweils aus Sicht des Schützen. Steht das iPhone hinter dem Tor, ist das Bild seitenverkehrt: Dann liegt „OL“ im Bild rechts. „Seiten tauschen“ dreht die Zuordnung um.</p>
+    <div class="goalbox" id="calibbox"><canvas id="calibcanvas"></canvas></div>
+    <div class="row">
+      <button class="btn small" id="btn-cam" type="button">Live-Kamera starten</button>
+      <label class="btn small" for="photo">Foto vom Tor</label>
+      <input id="photo" type="file" accept="image/*" capture="environment" hidden>
+      <button class="btn small" id="btn-flip" type="button">Seiten tauschen</button>
+      <button class="btn small" id="btn-resetc" type="button">Ecken zurücksetzen</button>
+    </div>
+    <p class="note" id="camnote">Noch kein Bild. Starte die Live-Kamera oder nimm ein Foto vom Tor auf.</p>
+    <div class="row"><button class="btn primary" id="btn-calib-done" type="button">Fertig</button></div>
+  </section>
+
+  <!-- GAME -->
+  <section id="screen-game" hidden>
+    <div class="game">
+      <div class="stack">
+        <div class="status"><span class="round" id="round"></span><span class="round" id="mode"></span></div>
+        <div class="board" id="board"></div>
+        <div class="checkout" id="checkout"></div>
+      </div>
+      <div class="stack">
+        <div class="row" style="justify-content: space-between">
+          <div class="viewtoggle" role="group" aria-label="Ansicht">
+            <button type="button" id="view-virtual" aria-pressed="true">Virtuelles Tor</button>
+            <button type="button" id="view-camera" aria-pressed="false">Kamerabild</button>
+          </div>
+          <div class="row">
+            <button class="btn small" id="btn-countdown" type="button">3-2-1</button>
+            <button class="btn small" id="btn-undo" type="button">Zurück</button>
+          </div>
+        </div>
+        <div class="goalbox" id="gamebox"><canvas id="gamecanvas"></canvas></div>
+        <p class="muted" style="font-size: 14px">Tippe auf die Stelle, an der der Ball im Tor gelandet ist. Tipp neben das Tor zählt als Fehlschuss.</p>
+        <div class="quick" id="quick"></div>
+        <div class="card stack">
+          <h3>Trefferhistorie</h3>
+          <div class="history" id="history"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WINNER -->
+  <section id="screen-win" hidden>
+    <div class="winner">
+      <div class="gs">Game Shot!</div>
+      <div class="who" id="winname"></div>
+      <p class="muted" id="winsub"></p>
+      <table class="stats" id="winstats"></table>
+      <div class="row" style="justify-content: center">
+        <button class="btn primary" id="btn-rematch" type="button">Revanche</button>
+        <button class="btn" id="btn-new2" type="button">Neues Spiel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="screen-settings" class="stack" hidden>
+    <h2>Einstellungen</h2>
+    <div class="card">
+      <div class="setting"><label for="s-sound">Soundeffekte<small>Jubel, Pfiff, Buzzer</small></label><input type="checkbox" id="s-sound"></div>
+      <div class="setting"><label for="s-voice">Stadionsprecher<small>Sprachausgabe auf Deutsch</small></label><input type="checkbox" id="s-voice"></div>
+      <div class="setting"><label for="s-vol">Lautstärke</label><input type="range" id="s-vol" min="0" max="1" step="0.05"></div>
+      <div class="setting"><label for="s-rate">Sprechtempo</label><input type="range" id="s-rate" min="0.7" max="1.4" step="0.05"></div>
+      <div class="setting"><label for="s-preset">Trefferzonen</label><select id="s-preset"></select></div>
+      <div class="setting"><label for="s-alpha">Zonen im Kamerabild<small>Deckkraft der Einblendung</small></label><input type="range" id="s-alpha" min="0.1" max="0.9" step="0.05"></div>
+      <div class="setting"><label for="s-test">Ton testen</label><button class="btn small" id="s-test" type="button">Abspielen</button></div>
+    </div>
+    <p class="note"><strong>Regeln:</strong> 3 Schüsse pro Runde, Treffer werden abgezogen, Ziel ist exakt 0. Überwerfen = Bust, Punktestand springt auf den Rundenbeginn zurück. Double-Out ist für eine spätere Version vorgesehen.</p>
+    <div class="row"><button class="btn" id="btn-settings-back" type="button">Zurück</button></div>
+  </section>
+</div>
+<div class="banner" id="banner" role="status" aria-live="polite"></div>
+
+<script>
+/* ===== BOLZDUELL engine: pure logic, no DOM (unit-tested with node) ===== */
+const BD = (() => {
+  // Zone geometry in goal coordinates: u = 0 (left post) .. 1 (right post),
+  // v = 0 (crossbar) .. 1 (ground). Seen from the shooter. Zones are checked
+  // from top of the list to the bottom; the first match wins. Left-side rects
+  // are mirrored automatically to the right side when mirror = true.
+  const PRESETS = {
+    standard: {
+      name: 'Standard',
+      zones: [
+        { pts: 50, label: 'Winkel', rects: [[0, 0, 0.12, 0.22]], mirror: true },
+        { pts: 25, label: 'Ecke unten', rects: [[0, 0.75, 0.15, 1]], mirror: true },
+        { pts: 20, label: 'Oberes Eck', rects: [[0, 0, 0.30, 0.30]], mirror: true },
+        { pts: 15, label: 'Pfosten / Latte', rects: [[0, 0, 0.15, 1], [0, 0, 0.5, 0.25]], mirror: true },
+        { pts: 10, label: 'Halbfeld', rects: [[0, 0, 0.30, 1]], mirror: true },
+        { pts: 5, label: 'Mitte', rects: [[0, 0, 1, 1]], mirror: false },
+      ],
+      labels: [[50, 0.06, 0.11], [25, 0.075, 0.875], [20, 0.21, 0.15], [15, 0.075, 0.52], [15, 0.5, 0.125], [10, 0.225, 0.65], [5, 0.5, 0.62]],
+    },
+    kids: {
+      name: 'Kids (größere Zonen)',
+      zones: [
+        { pts: 50, label: 'Winkel', rects: [[0, 0, 0.18, 0.32]], mirror: true },
+        { pts: 25, label: 'Ecke unten', rects: [[0, 0.65, 0.20, 1]], mirror: true },
+        { pts: 20, label: 'Oberes Eck', rects: [[0, 0, 0.34, 0.40]], mirror: true },
+        { pts: 15, label: 'Pfosten / Latte', rects: [[0, 0, 0.20, 1], [0, 0, 0.5, 0.32]], mirror: true },
+        { pts: 10, label: 'Halbfeld', rects: [[0, 0, 0.34, 1]], mirror: true },
+        { pts: 5, label: 'Mitte', rects: [[0, 0, 1, 1]], mirror: false },
+      ],
+      labels: [[50, 0.09, 0.16], [25, 0.1, 0.825], [20, 0.26, 0.2], [15, 0.1, 0.5], [15, 0.5, 0.16], [10, 0.27, 0.7], [5, 0.5, 0.66]],
+    },
+  };
+
+  /** All drawable rects (mirrored), lowest priority first, so later ones paint over earlier ones. */
+  function drawList(presetKey) {
+    const preset = PRESETS[presetKey] || PRESETS.standard;
+    const out = [];
+    [...preset.zones].reverse().forEach(z => expandRects(z).forEach(r => out.push({ pts: z.pts, r })));
+    const labels = [];
+    preset.labels.forEach(([pts, u, v]) => {
+      labels.push({ pts, u, v });
+      if (Math.abs(u - 0.5) > 1e-9) labels.push({ pts, u: 1 - u, v });
+    });
+    return { rects: out, labels };
+  }
+
+  function expandRects(zone) {
+    const out = zone.rects.map(r => r.slice());
+    if (zone.mirror) zone.rects.forEach(([x0, y0, x1, y1]) => out.push([1 - x1, y0, 1 - x0, y1]));
+    return out;
+  }
+
+  /** Points for a hit at goal coords (u,v). Outside the goal = 0 (miss). */
+  function zoneAt(u, v, presetKey = 'standard') {
+    if (!(u >= 0 && u <= 1 && v >= 0 && v <= 1)) return { pts: 0, label: 'Daneben' };
+    const preset = PRESETS[presetKey] || PRESETS.standard;
+    for (const z of preset.zones) {
+      for (const [x0, y0, x1, y1] of expandRects(z)) {
+        if (u >= x0 && u <= x1 && v >= y0 && v <= y1) return { pts: z.pts, label: z.label };
+      }
+    }
+    return { pts: 0, label: 'Daneben' };
+  }
+
+  /** Grid cells (for drawing): sample zone values on an N x M grid. */
+  function zoneGrid(presetKey, nx = 100, ny = 50) {
+    const g = [];
+    for (let j = 0; j < ny; j++) {
+      const row = [];
+      for (let i = 0; i < nx; i++) row.push(zoneAt((i + 0.5) / nx, (j + 0.5) / ny, presetKey).pts);
+      g.push(row);
+    }
+    return g;
+  }
+
+  // ---------- Homography (unit square <-> quad in image) ----------
+  // corners: [tl, tr, br, bl], each {x,y}. Returns 3x3 matrix H (row-major)
+  // mapping (u,v,1) -> image (x,y,w).
+  function squareToQuad(c) {
+    const [p0, p1, p2, p3] = c; // (0,0) (1,0) (1,1) (0,1)
+    const dx1 = p1.x - p2.x, dx2 = p3.x - p2.x, dy1 = p1.y - p2.y, dy2 = p3.y - p2.y;
+    const sx = p0.x - p1.x + p2.x - p3.x, sy = p0.y - p1.y + p2.y - p3.y;
+    let g = 0, h = 0;
+    if (Math.abs(sx) > 1e-12 || Math.abs(sy) > 1e-12) {
+      const den = dx1 * dy2 - dx2 * dy1;
+      g = (sx * dy2 - dx2 * sy) / den;
+      h = (dx1 * sy - sx * dy1) / den;
+    }
+    const a = p1.x - p0.x + g * p1.x, b = p3.x - p0.x + h * p3.x, c0 = p0.x;
+    const d = p1.y - p0.y + g * p1.y, e = p3.y - p0.y + h * p3.y, f = p0.y;
+    return [a, b, c0, d, e, f, g, h, 1];
+  }
+  function invert3(m) {
+    const [a, b, c, d, e, f, g, h, i] = m;
+    const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+    const det = a * A + b * B + c * C;
+    if (Math.abs(det) < 1e-12) return null;
+    return [A / det, -(b * i - c * h) / det, (b * f - c * e) / det,
+            B / det, (a * i - c * g) / det, -(a * f - c * d) / det,
+            C / det, -(a * h - b * g) / det, (a * e - b * d) / det];
+  }
+  function apply(m, x, y) {
+    const w = m[6] * x + m[7] * y + m[8];
+    return { x: (m[0] * x + m[1] * y + m[2]) / w, y: (m[3] * x + m[4] * y + m[5]) / w };
+  }
+
+  // ---------- Game engine ----------
+  const START_OPTIONS = [100, 200, 300, 500];
+  const THROWS_PER_TURN = 3;
+
+  function newGame(names, startScore) {
+    if (!names.length) throw new Error('Mindestens ein Spieler');
+    return {
+      startScore,
+      players: names.map(n => ({ name: n, score: startScore, turns: 0, hits: 0, throws: 0 })),
+      current: 0,
+      round: 1,
+      turnStart: startScore,
+      turnThrows: [],          // points of current turn
+      history: [],             // {round, player, pts, label, result, remaining, at?}
+      winner: null,
+    };
+  }
+
+  /**
+   * Register one shot. Returns {event, state} where event is one of
+   * 'hit' | 'miss' | 'bust' | 'win', plus flags: turnOver, nextPlayer.
+   * The state object is mutated and returned.
+   */
+  function shoot(s, pts, label = '', at = null) {
+    if (s.winner !== null) return { event: 'over', state: s };
+    const p = s.players[s.current];
+    const remainingBefore = p.score;
+    const after = remainingBefore - pts;
+    p.throws++;
+    if (pts > 0) p.hits++;
+    const entry = { round: s.round, player: s.current, pts, label, remaining: after, result: '', at };
+
+    if (after < 0) {
+      entry.result = 'bust';
+      p.score = s.turnStart;
+      entry.remaining = p.score;
+      s.history.push(entry);
+      const next = endTurn(s);
+      return { event: 'bust', state: s, turnOver: true, nextPlayer: next };
+    }
+    p.score = after;
+    s.turnThrows.push(pts);
+    if (after === 0) {
+      entry.result = 'win';
+      s.winner = s.current;
+      p.turns++;
+      s.history.push(entry);
+      return { event: 'win', state: s, turnOver: true, nextPlayer: null };
+    }
+    entry.result = pts > 0 ? 'hit' : 'miss';
+    s.history.push(entry);
+    if (s.turnThrows.length >= THROWS_PER_TURN) {
+      const next = endTurn(s);
+      return { event: entry.result, state: s, turnOver: true, nextPlayer: next };
+    }
+    return { event: entry.result, state: s, turnOver: false, nextPlayer: null };
+  }
+
+  function endTurn(s) {
+    s.players[s.current].turns++;
+    s.current = (s.current + 1) % s.players.length;
+    if (s.current === 0) s.round++;
+    s.turnStart = s.players[s.current].score;
+    s.turnThrows = [];
+    return s.current;
+  }
+
+  /** Undo by replaying history without the last shot (keeps logic in one place). */
+  function undo(s) {
+    if (!s.history.length) return s;
+    const names = s.players.map(p => p.name);
+    const replay = newGame(names, s.startScore);
+    s.history.slice(0, -1).forEach(h => shoot(replay, h.pts, h.label, h.at));
+    return replay;
+  }
+
+  /** Which single zone values would finish exactly from `remaining`. */
+  function finishOptions(remaining, throwsLeft, values = [5, 10, 15, 20, 25, 50]) {
+    if (throwsLeft <= 0) return [];
+    const res = [];
+    const rec = (rest, path, left) => {
+      if (rest === 0) { res.push(path); return; }
+      if (left === 0) return;
+      for (const v of values) if (v <= rest && (!path.length || v <= path[path.length - 1])) rec(rest - v, [...path, v], left - 1);
+    };
+    rec(remaining, [], throwsLeft);
+    return res.sort((a, b) => a.length - b.length);
+  }
+
+  return { PRESETS, zoneAt, zoneGrid, drawList, squareToQuad, invert3, apply, START_OPTIONS, THROWS_PER_TURN, newGame, shoot, undo, finishOptions };
+})();
+if (typeof module !== 'undefined') module.exports = BD;
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const ZCOL = { 5: '#0f2a16', 10: '#154a22', 15: '#1d7031', 20: '#27a043', 25: '#38d25a', 50: '#9dff7a' };
+const ZTXT = { 5: '#8aa394', 10: '#bfe6c9', 15: '#e9f5ec', 20: '#ffffff', 25: '#031006', 50: '#031006' };
+const ZDESC = { 5: 'groß', 10: 'mittel', 15: 'Pfosten', 20: 'oben', 25: 'Ecke', 50: 'Winkel' };
+const STARTDESC = { 100: 'Schnelles Duell', 200: 'Normales Spiel', 300: 'Längeres Duell', 500: 'Profi-Challenge' };
+
+// ---------- persistence (per device, optional) ----------
+const KEY = 'bolzduell.v1';
+const store = (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } })();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ } }
+const S = Object.assign({ sound: true, voice: true, vol: 0.8, rate: 1.05, preset: 'standard', alpha: 0.45 }, store.settings || {});
+let players = store.players || ['Spieler 1', 'Spieler 2'];
+let startScore = store.startScore || 200;
+let corners = store.corners || defaultCorners();
+let game = store.game || null;
+let view = 'virtual';
+function persist() { store.settings = S; store.players = players; store.startScore = startScore; store.corners = corners; store.game = game; save(); }
+function defaultCorners() { return [{ x: .15, y: .22 }, { x: .85, y: .22 }, { x: .85, y: .78 }, { x: .15, y: .78 }]; }
+
+// ---------- screens ----------
+const SCREENS = ['start', 'setup', 'calib', 'game', 'win', 'settings'];
+let current = 'start', beforeSettings = 'start';
+function show(name) {
+  SCREENS.forEach(s => { $('screen-' + s).hidden = s !== name; });
+  current = name;
+  if (name === 'start') renderStart();
+  if (name === 'setup') renderSetup();
+  if (name === 'calib') { sizeCanvas('calib'); }
+  if (name === 'game') { renderGame(); requestWake(); }
+  if (name === 'settings') renderSettings();
+  window.scrollTo(0, 0);
+}
+
+// ---------- audio (synthesized, no files) ----------
+let ac = null, master = null;
+function audio() {
+  if (!ac) { const C = window.AudioContext || window.webkitAudioContext; if (!C) return null; ac = new C(); master = ac.createGain(); master.connect(ac.destination); }
+  if (ac.state === 'suspended') ac.resume();
+  master.gain.value = S.vol;
+  return ac;
+}
+function tone(type, f0, f1, t0, dur, gain) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t0); if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.05);
+}
+let noiseBuf = null;
+function noise(t0, dur, freq, q, peak, attack) {
+  if (!noiseBuf) { noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const src = ac.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+  const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(peak, t0 + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 5.5; lg.gain.value = peak * 0.35; lfo.connect(lg); lg.connect(g.gain);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(t0); src.stop(t0 + dur + 0.1); lfo.start(t0); lfo.stop(t0 + dur + 0.1);
+}
+const SFX = {
+  whistle(t = 0) { const a = audio(); if (!a) return; const t0 = a.currentTime + t; const o = a.createOscillator(), g = a.createGain(), l = a.createOscillator(), lg = a.createGain(); o.frequency.value = 2900; l.frequency.value = 32; lg.gain.value = 180; l.connect(lg); lg.connect(o.frequency); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02); g.gain.setValueAtTime(0.18, t0 + 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55); o.connect(g); g.connect(master); o.start(t0); l.start(t0); o.stop(t0 + 0.6); l.stop(t0 + 0.6); },
+  hit(pts) { const a = audio(); if (!a) return; const t = a.currentTime; tone('sine', 160, 45, t, 0.25, 0.7); const lvl = { 5: .15, 10: .2, 15: .26, 20: .32, 25: .4, 50: .55 }[pts] || .2; noise(t + 0.05, 1.2 + pts / 20, 1100, 0.6, lvl, 0.25); if (pts >= 25) { [0, .12, .24].forEach((d, i) => tone('square', 660 * [1, 1.26, 1.5][i], 660 * [1, 1.26, 1.5][i], t + 0.1 + d, 0.18, 0.08)); } },
+  miss() { const a = audio(); if (!a) return; const t = a.currentTime; noise(t, 1.3, 380, 0.8, 0.22, 0.3); tone('triangle', 320, 170, t, 0.9, 0.12); },
+  bust() { const a = audio(); if (!a) return; const t = a.currentTime; tone('square', 110, 104, t, 0.7, 0.2); tone('square', 82, 80, t, 0.7, 0.15); },
+  change() { const a = audio(); if (!a) return; const t = a.currentTime; tone('sine', 880, 880, t, 0.18, 0.15); tone('sine', 1320, 1320, t + 0.16, 0.3, 0.15); },
+  win() { const a = audio(); if (!a) return; const t = a.currentTime; [523, 659, 784, 1046].forEach((f, i) => tone('sawtooth', f, f, t + i * 0.14, i === 3 ? 0.9 : 0.2, 0.09)); noise(t + 0.1, 4, 1000, 0.5, 0.6, 0.4); [0.9, 1.5, 2.1].forEach(d => SFX.whistle(d)); },
+  beep(f, d) { const a = audio(); if (!a) return; tone('sine', f, f, a.currentTime, d, 0.25); },
+};
+function sfx(name, ...args) { if (S.sound) try { SFX[name](...args); } catch (e) { /* audio unavailable */ } }
+
+// ---------- speech ----------
+let deVoice = null;
+function pickVoice() { try { const vs = speechSynthesis.getVoices(); deVoice = vs.find(v => /^de(-|_)DE/i.test(v.lang)) || vs.find(v => /^de/i.test(v.lang)) || null; } catch (e) { deVoice = null; } }
+if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function say(text, delay = 0) {
+  if (!S.voice || !('speechSynthesis' in window)) return;
+  setTimeout(() => { try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'de-DE'; if (deVoice) u.voice = deVoice; u.rate = S.rate; u.volume = S.vol; speechSynthesis.speak(u); } catch (e) { /* speech unavailable */ } }, delay);
+}
+
+// ---------- banner ----------
+let bannerT = null;
+function banner(text, kind = '') { const b = $('banner'); b.textContent = text; b.className = 'banner show ' + kind; clearTimeout(bannerT); bannerT = setTimeout(() => { b.className = 'banner ' + kind; }, 1800); }
+
+// ---------- start ----------
+function renderStart() {
+  $('zonekey').innerHTML = [5, 10, 15, 20, 25, 50].map(p => `<div style="background:${ZCOL[p]};color:${ZTXT[p]}">${p}<small>${ZDESC[p]}</small></div>`).join('');
+  $('btn-resume').hidden = !(game && game.winner === null);
+}
+
+// ---------- setup ----------
+function renderSetup() {
+  const box = $('players'); box.innerHTML = '';
+  players.forEach((name, i) => {
+    const row = document.createElement('div'); row.className = 'prow';
+    row.innerHTML = `<span class="num">${i + 1}</span><input id="p-${i}" maxlength="18" autocomplete="off" aria-label="Name Spieler ${i + 1}"><button type="button" aria-label="Spieler ${i + 1} entfernen">✕</button>`;
+    const inp = row.querySelector('input'); inp.value = name; inp.addEventListener('input', () => { players[i] = inp.value; persist(); });
+    const rm = row.querySelector('button'); rm.disabled = players.length <= 1; rm.addEventListener('click', () => { players.splice(i, 1); persist(); renderSetup(); });
+    box.appendChild(row);
+  });
+  $('btn-addp').disabled = players.length >= 8;
+  $('startopts').innerHTML = '';
+  BD.START_OPTIONS.forEach(v => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = v; b.setAttribute('aria-pressed', v === startScore); b.onclick = () => { startScore = v; persist(); renderSetup(); }; $('startopts').appendChild(b); });
+  $('startdesc').textContent = STARTDESC[startScore] || '';
+  $('presetopts').innerHTML = '';
+  Object.entries(BD.PRESETS).forEach(([k, p]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = p.name; b.setAttribute('aria-pressed', k === S.preset); b.onclick = () => { S.preset = k; persist(); renderSetup(); }; $('presetopts').appendChild(b); });
+}
+function startGame(names) {
+  game = BD.newGame(names, startScore); persist();
+  audio(); sfx('whistle');
+  say(`Anpfiff! ${startScore} Punkte. ${names[0]} beginnt.`, 500);
+  show('game');
+}
+
+// ---------- canvases ----------
+const cv = { calib: $('calibcanvas'), game: $('gamecanvas') };
+const media = { video: null, img: null, live: false };
+function srcSize() {
+  if (media.live && media.video && media.video.videoWidth) return { w: media.video.videoWidth, h: media.video.videoHeight };
+  if (media.img) return { w: media.img.naturalWidth, h: media.img.naturalHeight };
+  return { w: 16, h: 9 };
+}
+function sizeCanvas(which) {
+  const c = cv[which]; const box = c.parentElement; const W = box.clientWidth || 340;
+  let ratio;
+  if (which === 'game' && view === 'virtual') ratio = W > 600 ? 0.42 : 0.52;
+  else { const s = srcSize(); ratio = s.h / s.w; }
+  const H = Math.round(W * ratio), dpr = window.devicePixelRatio || 1;
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px';
+  c._w = W; c._h = H; c._dpr = dpr;
+  draw(which);
+}
+function virtualQuad(c) {
+  const mx = c._w * 0.07, top = c._h * 0.12, bottom = c._h * 0.10;
+  return [{ x: mx, y: top }, { x: c._w - mx, y: top }, { x: c._w - mx, y: c._h - bottom }, { x: mx, y: c._h - bottom }];
+}
+function cameraQuad(c) { return corners.map(p => ({ x: p.x * c._w, y: p.y * c._h })); }
+function quadFor(which) { const c = cv[which]; return which === 'game' && view === 'virtual' ? virtualQuad(c) : cameraQuad(c); }
+
+function drawZones(ctx, H, w, h, dpr, alpha) {
+  const off = document.createElement('canvas'); off.width = Math.round(w * dpr); off.height = Math.round(h * dpr); const o = off.getContext('2d'); o.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const { rects, labels } = BD.drawList(S.preset);
+  o.lineJoin = 'round';
+  rects.forEach(({ pts, r }) => {
+    const q = [BD.apply(H, r[0], r[1]), BD.apply(H, r[2], r[1]), BD.apply(H, r[2], r[3]), BD.apply(H, r[0], r[3])];
+    o.beginPath(); q.forEach((p, i) => i ? o.lineTo(p.x, p.y) : o.moveTo(p.x, p.y)); o.closePath();
+    o.fillStyle = ZCOL[pts]; o.fill();
+  });
+  const a = BD.apply(H, 0, 0), b = BD.apply(H, 1, 0), d = BD.apply(H, 0, 1);
+  const size = Math.max(10, Math.min(Math.hypot(b.x - a.x, b.y - a.y) / 16, Math.hypot(d.x - a.x, d.y - a.y) / 6));
+  o.textAlign = 'center'; o.textBaseline = 'middle'; o.font = `800 ${size}px 'Saira Condensed', 'Arial Narrow', sans-serif`;
+  labels.forEach(l => { const p = BD.apply(H, l.u, l.v); o.fillStyle = ZTXT[l.pts]; o.fillText(l.pts, p.x, p.y); });
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(off, 0, 0, w, h); ctx.restore();
+}
+function drawFrame(ctx, q, lw) {
+  ctx.save(); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = lw; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(q[3].x, q[3].y); ctx.lineTo(q[0].x, q[0].y); ctx.lineTo(q[1].x, q[1].y); ctx.lineTo(q[2].x, q[2].y); ctx.stroke(); ctx.restore();
+}
+function draw(which) {
+  const c = cv[which]; if (!c._w) return;
+  const ctx = c.getContext('2d'); ctx.setTransform(c._dpr, 0, 0, c._dpr, 0, 0);
+  const w = c._w, h = c._h;
+  const isCam = !(which === 'game' && view === 'virtual');
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+  if (isCam) {
+    const src = media.live && media.video ? media.video : media.img;
+    if (src) ctx.drawImage(src, 0, 0, w, h);
+    else { ctx.fillStyle = '#0d1410'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#8aa394'; ctx.font = "500 14px Barlow, sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(which === 'calib' ? 'Kein Bild: Live-Kamera starten oder Foto aufnehmen' : 'Kein Kamerabild: erst unter „Tor einmessen“ starten', w / 2, 10); }
+  } else {
+    ctx.fillStyle = '#07120a'; ctx.fillRect(0, h * 0.9, w, h * 0.1);
+    ctx.strokeStyle = '#1f2d24'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, h * 0.9); ctx.lineTo(w, h * 0.9); ctx.stroke();
+  }
+  const q = quadFor(which); const H = BD.squareToQuad(q);
+  if (BD.invert3(H)) {
+    drawZones(ctx, H, w, h, c._dpr, isCam ? S.alpha : 1);
+    drawFrame(ctx, q, isCam ? 2 : Math.max(4, w / 120));
+  }
+  if (which === 'game' && game) {
+    const marks = game.history.filter(e => e.at && e.round === game.round && (e.player === game.current || game.winner !== null && e.player === game.winner)).slice(-3);
+    marks.forEach((e, i) => { const p = BD.apply(H, e.at.u, e.at.v); ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#050806'; ctx.stroke(); ctx.fillStyle = '#050806'; ctx.font = "800 11px 'Saira Condensed', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(i + 1, p.x, p.y + 0.5); });
+  }
+  if (which === 'calib') {
+    q.forEach((p, i) => { ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fillStyle = 'rgba(77,255,106,.25)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#4dff6a'; ctx.stroke(); ctx.fillStyle = '#4dff6a'; ctx.font = "800 12px 'Saira Condensed', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(['OL', 'OR', 'UR', 'UL'][i], p.x, p.y - 26); });
+  }
+}
+let rafOn = false;
+function loop() { if (!media.live) { rafOn = false; return; } if (current === 'calib') draw('calib'); if (current === 'game' && view === 'camera') draw('game'); requestAnimationFrame(loop); }
+function startLoop() { if (!rafOn) { rafOn = true; requestAnimationFrame(loop); } }
+window.addEventListener('resize', () => { if (current === 'calib') sizeCanvas('calib'); if (current === 'game') sizeCanvas('game'); });
+
+// ---------- camera ----------
+async function startCamera() {
+  const note = $('camnote');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { note.textContent = 'Live-Kamera wird in dieser Ansicht nicht unterstützt. Nimm stattdessen ein Foto vom Tor auf.'; return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    const v = document.createElement('video'); v.playsInline = true; v.muted = true; v.setAttribute('playsinline', ''); v.srcObject = stream; await v.play();
+    media.video = v; media.live = true; media.img = null;
+    note.textContent = `Live-Kamera läuft (${v.videoWidth}×${v.videoHeight}). Stell das iPhone so auf, dass das ganze Tor im Bild ist.`;
+    sizeCanvas('calib'); startLoop();
+  } catch (e) {
+    note.textContent = 'Live-Kamera nicht verfügbar (' + (e && e.name || 'Fehler') + '). Über den Claude-Link ist die Live-Kamera immer gesperrt, auch in Safari. Nutze hier „Foto vom Tor“. Für das Live-Bild muss die Datei index.html auf einer eigenen HTTPS-Webseite liegen (z. B. GitHub Pages).';
+  }
+}
+$('photo').addEventListener('change', ev => {
+  const f = ev.target.files && ev.target.files[0]; if (!f) return;
+  const img = new Image(); img.onload = () => { media.img = img; media.live = false; $('camnote').textContent = 'Foto geladen. Jetzt die vier Ecken auf das Tor ziehen.'; sizeCanvas('calib'); }; img.src = URL.createObjectURL(f);
+});
+
+// drag corners
+let dragIdx = -1;
+function localPt(c, ev) { const r = c.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+cv.calib.addEventListener('pointerdown', ev => {
+  const c = cv.calib, p = localPt(c, ev), q = cameraQuad(c);
+  let best = -1, bd = 48; q.forEach((k, i) => { const d = Math.hypot(k.x - p.x, k.y - p.y); if (d < bd) { bd = d; best = i; } });
+  if (best >= 0) { dragIdx = best; c.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+});
+cv.calib.addEventListener('pointermove', ev => {
+  if (dragIdx < 0) return; const c = cv.calib, p = localPt(c, ev);
+  corners[dragIdx] = { x: Math.min(1, Math.max(0, p.x / c._w)), y: Math.min(1, Math.max(0, p.y / c._h)) };
+  if (!media.live) draw('calib');
+});
+['pointerup', 'pointercancel'].forEach(t => cv.calib.addEventListener(t, () => { if (dragIdx >= 0) { dragIdx = -1; persist(); } }));
+
+// ---------- game ----------
+function renderGame() {
+  if (!game) { show('start'); return; }
+  const g = game, cur = g.players[g.current];
+  $('round').textContent = `Runde ${g.round}`;
+  $('mode').textContent = `${g.startScore} · ${BD.PRESETS[S.preset].name}`;
+  $('board').innerHTML = g.players.map((p, i) => {
+    const active = i === g.current && g.winner === null;
+    const thr = active ? [0, 1, 2].map(k => { const v = g.turnThrows[k]; return `<span class="${v !== undefined ? 'done' : ''}">${v !== undefined ? v : '–'}</span>`; }).join('') : '';
+    return `<div class="pl ${active ? 'active' : ''}"><div class="name">${esc(p.name)}</div><div class="score">${p.score}</div><div class="meta">${active ? `<div class="throws">${thr}</div>` : `${p.hits}/${p.throws} Treffer`}</div></div>`;
+  }).join('');
+  const left = BD.THROWS_PER_TURN - g.turnThrows.length;
+  const fin = g.winner === null ? BD.finishOptions(cur.score, left) : [];
+  $('checkout').textContent = fin.length ? `Checkout möglich: ${fin[0].join(' + ')}` : '';
+  $('history').innerHTML = g.history.slice().reverse().map(e => {
+    const cls = e.result === 'bust' ? 'bust' : e.result === 'win' ? 'win' : '';
+    const txt = e.result === 'bust' ? 'BUST' : e.result === 'win' ? 'GAME SHOT' : e.pts ? `${e.pts} · ${e.label}` : 'Daneben';
+    return `<div class="${cls}"><span class="r">R${e.round}</span><span>${esc(g.players[e.player].name)}</span><span>${txt}</span><span class="r">${e.remaining}</span></div>`;
+  }).join('') || '<p class="muted">Noch keine Schüsse.</p>';
+  $('view-virtual').setAttribute('aria-pressed', view === 'virtual');
+  $('view-camera').setAttribute('aria-pressed', view === 'camera');
+  sizeCanvas('game');
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+let lockUntil = 0, changeT = null;
+function registerShot(pts, label, at) {
+  if (!game || game.winner !== null) return;
+  const now = Date.now(); if (now < lockUntil) return; lockUntil = now + 450;
+  audio(); clearTimeout(changeT);
+  const shooter = game.players[game.current].name;
+  const r = BD.shoot(game, pts, label, at);
+  persist();
+  const next = r.nextPlayer !== null && r.nextPlayer !== undefined ? game.players[r.nextPlayer].name : null;
+  if (r.event === 'win') {
+    sfx('win'); banner('Game Shot!');
+    say(`Game Shot! Wir haben einen Sieger! ${shooter}!`, 300);
+    setTimeout(() => { renderWin(); show('win'); }, 900);
+    renderGame(); return;
+  }
+  let text;
+  if (r.event === 'bust') { sfx('bust'); banner('Bust!', 'bust'); text = 'Bust! Die Runde zählt nicht!'; }
+  else if (r.event === 'miss') { sfx('miss'); banner('Daneben'); text = 'Daneben! Null Punkte.'; }
+  else {
+    sfx('hit', pts); banner(`${pts} Punkte`);
+    text = pts === 50 ? 'Wahnsinn! 50 Punkte im Winkel!' : pts === 25 ? 'Stark! 25 Punkte in der Ecke!' : `Treffer! ${pts} Punkte!`;
+    const myScore = r.turnOver ? null : game.players[game.current].score;
+    if (myScore !== null && BD.finishOptions(myScore, BD.THROWS_PER_TURN - game.turnThrows.length).length && myScore <= 150) text += ` Noch ${myScore} Punkte bis zum Sieg!`;
+  }
+  if (r.turnOver && next) { text += ` ${next} ist dran.`; changeT = setTimeout(() => { if (current === 'game') { sfx('change'); banner(`${next} ist dran`); } }, 1500); }
+  say(text, 250);
+  renderGame();
+}
+function tapGoal(ev) {
+  const c = cv.game, p = localPt(c, ev);
+  const Hi = BD.invert3(BD.squareToQuad(quadFor('game'))); if (!Hi) return;
+  const uv = BD.apply(Hi, p.x, p.y);
+  const z = BD.zoneAt(uv.x, uv.y, S.preset);
+  registerShot(z.pts, z.label, z.pts ? { u: uv.x, v: uv.y } : null);
+}
+cv.game.addEventListener('pointerup', tapGoal);
+$('quick').innerHTML = [0, 5, 10, 15, 20, 25, 50].map(v => `<button type="button" data-v="${v}" class="${v ? '' : 'zero'}">${v}</button>`).join('');
+$('quick').addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; const v = +b.dataset.v; registerShot(v, v ? 'manuell' : 'Daneben', null); });
+$('btn-undo').addEventListener('click', () => { if (game && game.history.length) { clearTimeout(changeT); game = BD.undo(game); persist(); banner('Letzter Schuss gelöscht'); renderGame(); } });
+$('btn-countdown').addEventListener('click', () => {
+  audio(); [0, 1, 2].forEach(i => setTimeout(() => { sfx('beep', 880, 0.15); banner(String(3 - i)); }, i * 1000));
+  setTimeout(() => { sfx('beep', 1320, 0.45); banner('Schuss!'); }, 3000);
+  say('Drei, zwei, eins, Schuss!', 0);
+});
+$('view-virtual').addEventListener('click', () => { view = 'virtual'; renderGame(); });
+$('view-camera').addEventListener('click', () => { view = 'camera'; renderGame(); startLoop(); });
+
+// ---------- winner ----------
+function renderWin() {
+  const g = game, w = g.players[g.winner];
+  $('winname').textContent = w.name;
+  $('winsub').textContent = `${g.startScore} Punkte in Runde ${g.round} auf exakt null.`;
+  $('winstats').innerHTML = '<tr><th>Spieler</th><th>Rest</th><th>Treffer</th><th>Quote</th></tr>' + g.players.map(p => `<tr><td>${esc(p.name)}</td><td>${p.score}</td><td>${p.hits}/${p.throws}</td><td>${p.throws ? Math.round(p.hits / p.throws * 100) : 0} %</td></tr>`).join('');
+}
+
+// ---------- settings ----------
+function renderSettings() {
+  $('s-sound').checked = S.sound; $('s-voice').checked = S.voice; $('s-vol').value = S.vol; $('s-rate').value = S.rate; $('s-alpha').value = S.alpha;
+  $('s-preset').innerHTML = Object.entries(BD.PRESETS).map(([k, p]) => `<option value="${k}" ${k === S.preset ? 'selected' : ''}>${p.name}</option>`).join('');
+}
+$('s-sound').onchange = e => { S.sound = e.target.checked; persist(); };
+$('s-voice').onchange = e => { S.voice = e.target.checked; persist(); };
+$('s-vol').oninput = e => { S.vol = +e.target.value; if (master) master.gain.value = S.vol; persist(); };
+$('s-rate').oninput = e => { S.rate = +e.target.value; persist(); };
+$('s-alpha').oninput = e => { S.alpha = +e.target.value; persist(); };
+$('s-preset').onchange = e => { S.preset = e.target.value; persist(); };
+$('s-test').onclick = () => { audio(); sfx('hit', 50); say('Wahnsinn! 50 Punkte im Winkel!', 200); };
+
+// ---------- nav ----------
+$('btn-home').onclick = () => show('start');
+$('btn-settings').onclick = () => { if (current !== 'settings') beforeSettings = current; show('settings'); };
+$('btn-settings-back').onclick = () => show(beforeSettings);
+$('btn-new').onclick = () => show('setup');
+$('btn-new2').onclick = () => show('setup');
+$('btn-resume').onclick = () => show('game');
+$('btn-calib').onclick = () => show('calib');
+$('btn-addp').onclick = () => { players.push('Spieler ' + (players.length + 1)); persist(); renderSetup(); setTimeout(() => { const i = $('p-' + (players.length - 1)); if (i) i.select(); }, 0); };
+$('btn-kickoff').onclick = () => { const names = players.map((n, i) => n.trim() || 'Spieler ' + (i + 1)); startGame(names); };
+$('btn-rematch').onclick = () => startGame(game.players.map(p => p.name));
+$('btn-cam').onclick = startCamera;
+$('btn-resetc').onclick = () => { corners = defaultCorners(); persist(); draw('calib'); };
+$('btn-flip').onclick = () => { corners = [corners[1], corners[0], corners[3], corners[2]]; persist(); draw('calib'); };
+$('btn-calib-done').onclick = () => { persist(); if (game && game.winner === null) { view = (media.img || media.live) ? 'camera' : view; show('game'); } else show('start'); };
+
+let wake = null;
+async function requestWake() { try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { wake = null; } }
+
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (current === 'game') draw('game'); });
+show('start');
+})();
+</script>
+
+</body>
+</html>
