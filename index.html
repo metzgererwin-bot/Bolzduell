@@ -73,7 +73,9 @@ p { line-height: 1.5; margin: 0; max-width: 62ch; }
 .prow button { background: none; border: 1px solid var(--line); border-radius: 10px; width: 44px; height: 44px; color: var(--muted); }
 
 /* Game */
-.game { display: grid; gap: 14px; }
+.game { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.game > * { min-width: 0; }
+.goalbox { max-width: 100%; }
 @media (min-width: 760px) { .game { grid-template-columns: minmax(260px, 340px) 1fr; align-items: start; } }
 .status { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .status .round { font-family: var(--font-display); font-weight: 600; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; font-size: 14px; }
@@ -90,7 +92,21 @@ p { line-height: 1.5; margin: 0; max-width: 62ch; }
 .checkout { font-size: 14px; color: var(--neon); min-height: 1.4em; }
 
 .goalbox { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #000; touch-action: none; }
-.goalbox canvas { display: block; width: 100%; height: auto; }
+.goalbox canvas { display: block; width: 100%; height: auto; margin-inline: auto; }
+/* Landscape phone: camera picture as large as possible, controls beside it */
+@media (orientation: landscape) and (max-height: 600px) {
+  .wrap { padding-block: 6px 16px; }
+  header.bar { padding-block: 0 6px; }
+  .logo { font-size: 20px; }
+  .logo small { display: none; }
+  #screen-calib { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 8px 12px; align-items: start; }
+  #screen-calib > h2, #screen-calib > p.muted { display: none; }
+  #screen-calib > #calibbox { grid-column: 1; grid-row: 1 / span 3; }
+  #screen-calib > :not(#calibbox) { grid-column: 2; }
+  #screen-calib .row { flex-direction: column; align-items: stretch; }
+  #screen-calib .btn.small { width: 100%; text-align: center; }
+  #screen-calib .note { font-size: 12px; padding: 4px 8px; }
+}
 .viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .viewtoggle button { background: none; border: 0; padding: 7px 12px; font-size: 14px; color: var(--muted); }
 .viewtoggle button[aria-pressed="true"] { background: var(--neon); color: var(--ink-on-neon); font-weight: 600; }
@@ -531,7 +547,20 @@ let startScore = store.startScore || 200;
 let corners = store.corners || defaultCorners();
 let game = store.game || null;
 let view = 'virtual';
-function persist() { store.settings = S; store.players = players; store.startScore = startScore; store.corners = corners; store.game = game; save(); }
+function isLandscape() { return window.innerWidth > window.innerHeight && window.innerHeight < 600; }
+// Goal corners are stored separately for portrait and landscape camera pictures.
+const cornersBy = store.cornersBy || {};
+let cornerKey = null;
+function orientationKey() { const s = srcSize(); return s.w >= s.h ? 'quer' : 'hoch'; }
+function syncCornerOrientation() {
+  if (!media.live && !media.img) return false;
+  const k = orientationKey(); if (k === cornerKey) return false;
+  if (cornerKey) cornersBy[cornerKey] = corners;
+  corners = cornersBy[k] || (cornerKey ? defaultCorners() : corners);
+  cornerKey = k; cornersBy[k] = corners; persist();
+  return true;
+}
+function persist() { store.settings = S; store.players = players; store.startScore = startScore; store.corners = corners; if (cornerKey) cornersBy[cornerKey] = corners; store.cornersBy = cornersBy; store.game = game; save(); }
 function defaultCorners() { return [{ x: .15, y: .22 }, { x: .85, y: .22 }, { x: .85, y: .78 }, { x: .15, y: .78 }]; }
 
 // ---------- screens ----------
@@ -634,12 +663,17 @@ function srcSize() {
   return { w: 16, h: 9 };
 }
 function sizeCanvas(which) {
-  const c = cv[which]; const box = c.parentElement; const W = box.clientWidth || 340;
+  const c = cv[which]; const box = c.parentElement; c.style.width = '100%'; let W = box.clientWidth || 340;
   let ratio;
   if (which === 'game' && view === 'virtual') ratio = W > 600 ? 0.42 : 0.52;
   else { const s = srcSize(); ratio = s.h / s.w; }
+  if (isLandscape()) { // keep the whole picture on screen when the phone is turned
+    const top = box.getBoundingClientRect().top + window.scrollY;
+    const maxH = Math.max(160, window.innerHeight - (which === 'calib' ? 24 : Math.min(top, 120)) - 16);
+    if (W * ratio > maxH) W = Math.floor(maxH / ratio);
+  }
   const H = Math.round(W * ratio), dpr = window.devicePixelRatio || 1;
-  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px';
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); c.style.height = H + 'px'; c.style.width = W + 'px';
   c._w = W; c._h = H; c._dpr = dpr;
   draw(which);
 }
@@ -698,8 +732,17 @@ function draw(which) {
   }
 }
 let rafOn = false;
-function loop() { if (!media.live) { rafOn = false; return; } if (current === 'calib') draw('calib'); if (current === 'game' && view === 'camera') { if (det.on) processFrame(); draw('game'); } requestAnimationFrame(loop); }
+let lastSrc = '';
+function checkRotation() {
+  const s = srcSize(), key = s.w + 'x' + s.h; if (key === lastSrc) return; const first = !lastSrc; lastSrc = key;
+  const changed = syncCornerOrientation();
+  if (current === 'calib') sizeCanvas('calib'); if (current === 'game') sizeCanvas('game');
+  if (!first && det.on) { detSetup(); detStatus('Handy gedreht – Erkennung neu gestartet.'); }
+  if (!first && changed) banner(orientationKey() === 'quer' ? 'Querformat' : 'Hochformat');
+}
+function loop() { if (!media.live) { rafOn = false; return; } checkRotation(); if (current === 'calib') draw('calib'); if (current === 'game' && view === 'camera') { if (det.on) processFrame(); draw('game'); } requestAnimationFrame(loop); }
 function startLoop() { if (!rafOn) { rafOn = true; requestAnimationFrame(loop); } }
+window.addEventListener('orientationchange', () => setTimeout(() => { if (current === 'calib') sizeCanvas('calib'); if (current === 'game') sizeCanvas('game'); }, 350));
 window.addEventListener('resize', () => { if (current === 'calib') sizeCanvas('calib'); if (current === 'game') sizeCanvas('game'); });
 
 // ---------- camera ----------
@@ -718,7 +761,7 @@ async function startCamera() {
 }
 $('photo').addEventListener('change', ev => {
   const f = ev.target.files && ev.target.files[0]; if (!f) return;
-  const img = new Image(); img.onload = () => { media.img = img; media.live = false; $('camnote').textContent = 'Foto geladen. Jetzt die vier Ecken auf das Tor ziehen.'; sizeCanvas('calib'); }; img.src = URL.createObjectURL(f);
+  const img = new Image(); img.onload = () => { media.img = img; media.live = false; syncCornerOrientation(); $('camnote').textContent = 'Foto geladen. Jetzt die vier Ecken auf das Tor ziehen.'; sizeCanvas('calib'); }; img.src = URL.createObjectURL(f);
 });
 
 // drag corners
